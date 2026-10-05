@@ -1,0 +1,13 @@
+# generated data (reproducible via scripts/data/)
+data/*.jsonl
+data/raw/
+# python
+__pycache__/
+*.pyc
+# training outputs
+outputs/
+# notebooks checkpoints
+.ipynb_checkpoints/
+# env
+.venv/
+venv/

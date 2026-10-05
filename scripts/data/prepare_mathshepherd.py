@@ -39,10 +39,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="data/mathshepherd_unified.jsonl")
     ap.add_argument("--max_records", type=int, default=None)
+    ap.add_argument("--streaming", action="store_true",
+                    help="stream instead of downloading the full file "
+                         "(recommended on Kaggle: only --max_records rows are fetched)")
     args = ap.parse_args()
 
     from datasets import load_dataset
-    ds = load_dataset("peiyi9979/Math-Shepherd", split="train")
+    ds = load_dataset("peiyi9979/Math-Shepherd", split="train",
+                      streaming=args.streaming or args.max_records is not None)
 
     stats = Counter()
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)

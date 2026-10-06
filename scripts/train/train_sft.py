@@ -86,6 +86,9 @@ def main():
     )
 
     tcfg = cfg["training"]
+    # T4 has fp16 tensor cores but no bf16 tensor cores: fp16 is 2-3x faster
+    # than bf16 on T4. Use bf16 on Ampere and newer.
+    precision = tcfg.get("precision", "bf16")
     sfcfg = SFTConfig(
         output_dir=cfg["output_dir"],
         model_name_or_path=cfg["model"],
@@ -94,7 +97,8 @@ def main():
         gradient_accumulation_steps=tcfg["gradient_accumulation_steps"],
         learning_rate=float(tcfg["learning_rate"]),
         num_train_epochs=tcfg["num_train_epochs"],
-        bf16=True,
+        fp16=(precision == "fp16"),
+        bf16=(precision == "bf16"),
         gradient_checkpointing=True,
         logging_steps=tcfg.get("logging_steps", 10),
         save_steps=tcfg.get("save_steps", 200),

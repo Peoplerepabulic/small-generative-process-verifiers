@@ -89,13 +89,17 @@ def main():
     print(f"{len(ds)} step-classification examples")
 
     tcfg = cfg["training"]
+    # T4 has fp16 tensor cores but no bf16 tensor cores: fp16 is 2-3x faster
+    # than bf16 on T4. Use bf16 on Ampere and newer.
+    precision = tcfg.get("precision", "bf16")
     targs = TrainingArguments(
         output_dir=cfg["output_dir"],
         per_device_train_batch_size=tcfg["per_device_train_batch_size"],
         gradient_accumulation_steps=tcfg["gradient_accumulation_steps"],
         learning_rate=float(tcfg["learning_rate"]),
         num_train_epochs=tcfg["num_train_epochs"],
-        bf16=True,
+        fp16=(precision == "fp16"),
+        bf16=(precision == "bf16"),
         logging_steps=10, save_steps=200,
         report_to=tcfg.get("report_to", "none"),
         seed=cfg.get("seed", 0),

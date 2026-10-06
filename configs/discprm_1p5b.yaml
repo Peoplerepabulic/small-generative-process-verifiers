@@ -17,4 +17,5 @@ training:
   learning_rate: 2.0e-5
   num_train_epochs: 1
   max_examples: 200000
+  precision: fp16  # T4: fp16 tensor cores, no bf16 tensor cores (bf16 on Ampere+)
   report_to: none

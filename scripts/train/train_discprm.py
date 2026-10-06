@@ -58,9 +58,15 @@ def main():
     tok = AutoTokenizer.from_pretrained(cfg["model"], trust_remote_code=True)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+    # Model dtype must match the amp precision below: fp16=True (T4) uses an
+    # fp16 GradScaler, which crashes on BFloat16 weights
+    # ("_amp_foreach_non_finite_check_and_unscale_cuda" is not implemented for
+    # BFloat16). bf16=True disables the scaler and needs BFloat16 weights.
+    precision = cfg["training"].get("precision", "bf16")
+    torch_dtype = {"fp16": torch.float16, "bf16": torch.bfloat16}[precision]
     model = AutoModelForSequenceClassification.from_pretrained(
         cfg["model"], num_labels=2, trust_remote_code=True,
-        torch_dtype=torch.bfloat16)
+        torch_dtype=torch_dtype)
     # Qwen2 checkpoints define no pad token: the tokenizer fallback above is
     # not enough -- the model's config must also carry pad_token_id, otherwise
     # forward() raises "Cannot handle batch sizes > 1 if no padding token is
@@ -90,8 +96,8 @@ def main():
 
     tcfg = cfg["training"]
     # T4 has fp16 tensor cores but no bf16 tensor cores: fp16 is 2-3x faster
-    # than bf16 on T4. Use bf16 on Ampere and newer.
-    precision = tcfg.get("precision", "bf16")
+    # than bf16 on T4. Use bf16 on Ampere and newer. (precision was read
+    # before model loading so the model dtype matches; see above.)
     targs = TrainingArguments(
         output_dir=cfg["output_dir"],
         per_device_train_batch_size=tcfg["per_device_train_batch_size"],

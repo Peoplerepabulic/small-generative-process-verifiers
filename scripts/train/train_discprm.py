@@ -58,15 +58,17 @@ def main():
     tok = AutoTokenizer.from_pretrained(cfg["model"], trust_remote_code=True)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    # Model dtype must match the amp precision below: fp16=True (T4) uses an
-    # fp16 GradScaler, which crashes on BFloat16 weights
-    # ("_amp_foreach_non_finite_check_and_unscale_cuda" is not implemented for
-    # BFloat16). bf16=True disables the scaler and needs BFloat16 weights.
+    # Keep the model in fp32: with fp16=True the Trainer runs autocast with an
+    # fp16 GradScaler, which requires fp32 master weights ("Attempting to
+    # unscale FP16 gradients" if the model is pre-loaded in fp16, and
+    # "_amp_foreach_non_finite_check_and_unscale_cuda" is not implemented for
+    # BFloat16 if pre-loaded in bf16). bf16=True needs no scaler. Memory is
+    # fine: LoRA trains only ~1.2% of params, so fp32 base weights (~6.3GB
+    # for 1.5B) plus fp32 AdamW states on the adapters fit a T4 (the v4 OOM
+    # was full fine-tuning, not LoRA).
     precision = cfg["training"].get("precision", "bf16")
-    torch_dtype = {"fp16": torch.float16, "bf16": torch.bfloat16}[precision]
     model = AutoModelForSequenceClassification.from_pretrained(
-        cfg["model"], num_labels=2, trust_remote_code=True,
-        torch_dtype=torch_dtype)
+        cfg["model"], num_labels=2, trust_remote_code=True)
     # Qwen2 checkpoints define no pad token: the tokenizer fallback above is
     # not enough -- the model's config must also carry pad_token_id, otherwise
     # forward() raises "Cannot handle batch sizes > 1 if no padding token is

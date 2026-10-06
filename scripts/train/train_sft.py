@@ -10,9 +10,15 @@ agreement-filtered data:
 Target completion is the gold verification in the exact format from rewards.py.
 Compare against GRPO (train_grpo.py), which trains on ALL chains including
 negatives, with an explicit calibration reward.
+
+T4-friendly: LoRA (r=16) + gradient checkpointing (same rationale as
+train_discprm.py -- full-FT AdamW states OOM on a 14.5GB T4). Adapters are
+merged into the base model before saving, so evaluate_hf.py sees a plain
+full model.
 """
 import argparse
 import json
+import random
 import yaml
 
 from datasets import Dataset
@@ -31,7 +37,7 @@ def gold_completion(gold):
     return "\n".join(lines)
 
 
-def build_examples(paths, agreement_only=True):
+def build_examples(paths, agreement_only=True, max_examples=None, seed=0):
     examples = []
     for path in paths:
         with open(path) as f:
@@ -47,20 +53,37 @@ def build_examples(paths, agreement_only=True):
                     continue  # rejection sampling: discard disagreeing chains
                 prompt = build_verifier_prompt(d["problem"], step_texts)
                 examples.append({"prompt": prompt, "completion": gold_completion(gold)})
+    if max_examples is not None and len(examples) > max_examples:
+        examples = random.Random(seed).sample(examples, max_examples)
     return examples
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/sft_1p5b.yaml")
+    ap.add_argument("--max_examples", type=int, default=None,
+                    help="pilot cap on SFT examples (overrides config)")
     args = ap.parse_args()
     cfg = yaml.safe_load(open(args.config))
 
+    from peft import LoraConfig, TaskType
     from trl import SFTConfig, SFTTrainer
 
-    examples = build_examples(cfg["data"]["train_paths"])
+    max_examples = args.max_examples
+    if max_examples is None:
+        max_examples = cfg["training"].get("max_examples")
+    examples = build_examples(cfg["data"]["train_paths"],
+                              max_examples=max_examples,
+                              seed=cfg.get("seed", 0))
     ds = Dataset.from_list(examples)
     print(f"{len(ds)} SFT examples (agreement-filtered)")
+
+    lora_cfg = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=16, lora_alpha=32, lora_dropout=0.05,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                        "gate_proj", "up_proj", "down_proj"],
+    )
 
     tcfg = cfg["training"]
     sfcfg = SFTConfig(
@@ -72,6 +95,7 @@ def main():
         learning_rate=float(tcfg["learning_rate"]),
         num_train_epochs=tcfg["num_train_epochs"],
         bf16=True,
+        gradient_checkpointing=True,
         logging_steps=tcfg.get("logging_steps", 10),
         save_steps=tcfg.get("save_steps", 200),
         report_to=tcfg.get("report_to", "none"),
@@ -82,9 +106,16 @@ def main():
         return [p + "\n" + c for p, c in zip(ex["prompt"], ex["completion"])]
 
     trainer = SFTTrainer(model=cfg["model"], args=sfcfg, train_dataset=ds,
-                         formatting_func=formatting_fn)
+                         formatting_func=formatting_fn, peft_config=lora_cfg)
     trainer.train()
-    trainer.save_model(cfg["output_dir"])
+    # Merge adapters so outputs/<name> is a plain full model for evaluate_hf.py.
+    merged = trainer.model.merge_and_unload()
+    merged.save_pretrained(cfg["output_dir"])
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(cfg["model"], trust_remote_code=True)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    tok.save_pretrained(cfg["output_dir"])
 
 
 if __name__ == "__main__":

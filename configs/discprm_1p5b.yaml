@@ -1,4 +1,7 @@
-# Discriminative PRM baseline (per-step classifier). Fits on a Kaggle T4.
+# Discriminative PRM baseline (per-step classifier).
+# LoRA (r=16) + gradient checkpointing: full-FT AdamW states (~12GB fp32)
+# OOM on a 14.5GB T4. Adapters merged before saving.
+# max_examples: pilot cap (week 1-2); full-data run later on bigger GPUs.
 model: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 output_dir: outputs/discprm-1p5b
 seed: 0
@@ -13,4 +16,5 @@ training:
   gradient_accumulation_steps: 4
   learning_rate: 2.0e-5
   num_train_epochs: 1
+  max_examples: 200000
   report_to: none

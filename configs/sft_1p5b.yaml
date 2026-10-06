@@ -1,5 +1,7 @@
 # SFT baseline: rejection-sampling proxy (chosen-only, agreement-filtered).
-# Fits on a Kaggle T4.
+# LoRA (r=16) + gradient checkpointing: full-FT AdamW states (~12GB fp32)
+# OOM on a 14.5GB T4. Adapters merged before saving.
+# max_examples: pilot cap (week 1-2); full-data run later on bigger GPUs.
 model: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 output_dir: outputs/sft-1p5b
 seed: 0
@@ -15,6 +17,7 @@ training:
   gradient_accumulation_steps: 8
   learning_rate: 2.0e-5
   num_train_epochs: 2
+  max_examples: 50000
   logging_steps: 10
   save_steps: 200
   report_to: none

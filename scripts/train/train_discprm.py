@@ -5,19 +5,26 @@ label = gold label of step i. Standard cross-entropy, same training data as the
 generative models (all step labels, not rejection-sampled) so the comparison
 isolates the *paradigm* (generative vs discriminative), not the data.
 
-Cheap: fits on a Kaggle T4.
+T4-friendly: LoRA (r=16) + gradient checkpointing. Full fine-tuning with AdamW
+needs ~12GB for fp32 optimizer states alone on 1.5B params, which OOMs on a
+14.5GB T4 (no batch-size tweak fixes that). LoRA keeps the comparison
+apples-to-apples across the DiscPRM/SFT/GRPO baselines; adapters are merged
+into the base model before saving, so downstream code sees a plain full model.
 """
 import argparse
 import json
+import random
 import yaml
 
 import torch
 from datasets import Dataset
+from peft import LoraConfig, TaskType, get_peft_model
 from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
                           DataCollatorWithPadding, Trainer, TrainingArguments)
 
 
-def build_examples(paths, tokenizer, max_length=1024):
+def build_examples(paths, tokenizer, max_length=1024, max_examples=None,
+                   seed=0):
     rows = []
     for path in paths:
         with open(path) as f:
@@ -27,6 +34,8 @@ def build_examples(paths, tokenizer, max_length=1024):
                     for c in s["candidates"]:
                         rows.append({"problem": d["problem"], "step": c["text"],
                                      "label": c["gold"]})
+    if max_examples is not None and len(rows) > max_examples:
+        rows = random.Random(seed).sample(rows, max_examples)
     ds = Dataset.from_list(rows)
 
     def tok(ex):
@@ -41,6 +50,8 @@ def build_examples(paths, tokenizer, max_length=1024):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/discprm_1p5b.yaml")
+    ap.add_argument("--max_examples", type=int, default=None,
+                    help="pilot cap on step examples (overrides config)")
     args = ap.parse_args()
     cfg = yaml.safe_load(open(args.config))
 
@@ -57,7 +68,24 @@ def main():
     if model.config.pad_token_id is None:
         model.config.pad_token_id = tok.pad_token_id
 
-    ds = build_examples(cfg["data"]["train_paths"], tok)
+    # LoRA + gradient checkpointing (see module docstring for why).
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable()
+    lora_cfg = LoraConfig(
+        task_type=TaskType.SEQ_CLS,
+        r=16, lora_alpha=32, lora_dropout=0.05,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                        "gate_proj", "up_proj", "down_proj"],
+        modules_to_save=["score"],  # classification head trains fully
+    )
+    model = get_peft_model(model, lora_cfg)
+    model.print_trainable_parameters()
+
+    max_examples = args.max_examples
+    if max_examples is None:
+        max_examples = cfg["training"].get("max_examples")
+    ds = build_examples(cfg["data"]["train_paths"], tok,
+                        max_examples=max_examples, seed=cfg.get("seed", 0))
     print(f"{len(ds)} step-classification examples")
 
     tcfg = cfg["training"]
@@ -74,6 +102,8 @@ def main():
     )
     Trainer(model=model, args=targs, train_dataset=ds,
             data_collator=DataCollatorWithPadding(tokenizer=tok)).train()
+    # Merge adapters so outputs/<name> is a plain full model.
+    model = model.merge_and_unload()
     model.save_pretrained(cfg["output_dir"])
     tok.save_pretrained(cfg["output_dir"])
 

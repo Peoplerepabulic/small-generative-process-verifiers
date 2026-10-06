@@ -14,7 +14,7 @@ import yaml
 import torch
 from datasets import Dataset
 from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
-                          Trainer, TrainingArguments)
+                          DataCollatorWithPadding, Trainer, TrainingArguments)
 
 
 def build_examples(paths, tokenizer, max_length=1024):
@@ -66,7 +66,8 @@ def main():
         report_to=tcfg.get("report_to", "none"),
         seed=cfg.get("seed", 0),
     )
-    Trainer(model=model, args=targs, train_dataset=ds).train()
+    Trainer(model=model, args=targs, train_dataset=ds,
+            data_collator=DataCollatorWithPadding(tokenizer=tok)).train()
     model.save_pretrained(cfg["output_dir"])
     tok.save_pretrained(cfg["output_dir"])
 

@@ -50,6 +50,12 @@ def main():
     model = AutoModelForSequenceClassification.from_pretrained(
         cfg["model"], num_labels=2, trust_remote_code=True,
         torch_dtype=torch.bfloat16)
+    # Qwen2 checkpoints define no pad token: the tokenizer fallback above is
+    # not enough -- the model's config must also carry pad_token_id, otherwise
+    # forward() raises "Cannot handle batch sizes > 1 if no padding token is
+    # defined." on batched input.
+    if model.config.pad_token_id is None:
+        model.config.pad_token_id = tok.pad_token_id
 
     ds = build_examples(cfg["data"]["train_paths"], tok)
     print(f"{len(ds)} step-classification examples")

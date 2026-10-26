@@ -42,7 +42,9 @@ two reasonable parsers disagree on 21 of those steps outright.
 │   ├── data/                # download + unify PRM800K / Math-Shepherd
 │   ├── train/               # rewards.py; DiscPRM / SFT / GRPO trainers;
 │   │                        # partB_interference.py; partC_cascade.py
-│   └── evaluation/          # evaluate.py, evaluate_hf.py
+│   └── evaluation/          # step/solution eval; token-probability readout;
+│                            # official-baseline dump + parsers; prefix forcing;
+│                            # Part C scores/sweep; revision statistics
 ├── requirements.txt
 └── LICENSE
 ```

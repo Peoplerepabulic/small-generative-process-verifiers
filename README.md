@@ -77,8 +77,8 @@ unified all-candidates format) are documented in `docs/DATA_NOTES.md`.
 
 ## Citation
 
-If you use this code, please cite the paper (arXiv link to be added on release):
+If you use this code, please cite the paper:
 
 > Qiwei Li. *What Breaks in Small Generative Process Verifiers: Verdict
 > Aggregation, Calibration Limits, and Discriminative–Generative Cascades.*
-> arXiv preprint, 2026.
+> Preprint, Zenodo, 2026. https://doi.org/10.5281/zenodo.23719741

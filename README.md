@@ -2,7 +2,8 @@
 
 Code accompanying the paper **"What Breaks in Small Generative Process Verifiers:
 Verdict Aggregation, Calibration Limits, and Discriminative–Generative Cascades"**
-(Qiwei Li, Washington University in St. Louis; arXiv preprint, 2026).
+(Qiwei Li, Washington University in St. Louis; preprint, Zenodo,
+2026 — https://doi.org/10.5281/zenodo.23719741; arXiv version to follow).
 
 We study a 1.5B generative process verifier (DeepSeek-R1-Distill-Qwen-1.5B,
 fixed step-judgment format, no free-form critique) on PRM800K, and find that
